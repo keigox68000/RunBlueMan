@@ -22,6 +22,7 @@
             border: 2px solid #333;
             border-radius: 8px;
             box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+            cursor: pointer; 
         }
         .game-container {
             display: flex;
@@ -34,7 +35,7 @@
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
             position: relative;
         }
-        .controls, .info, .stage-info {
+        .info, .stage-info {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -48,7 +49,7 @@
             color: #ffdd57;
             margin-bottom: 10px;
         }
-        button {
+        button { 
             background-color: #007bff;
             color: white;
             border: none;
@@ -71,7 +72,7 @@
             color: #00ffff;
             text-shadow: 0 0 5px #00ffff;
         }
-        #messageOverlay, #stageClearOverlay, #allClearOverlay {
+        #messageOverlay, #stageClearOverlay, #allClearOverlay, #startMessageOverlay { 
             position: absolute;
             top: 0;
             left: 0;
@@ -102,8 +103,7 @@
         .katsu-curry-image {
             margin-bottom: 20px;
             border-radius: 10px;
-            box-shadow: 0 0 10px rgba(255, 223, 186, 0.7);
-            background-color: #fff;
+            background-color: transparent; 
         }
         .next-stage-button {
              margin-top: 20px;
@@ -111,6 +111,18 @@
         .key-info {
             font-size: 0.9em;
             color: #aaa;
+        }
+        #hitZMessage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2em;
+            color: #fff;
+            text-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
+            z-index: 5; 
+            pointer-events: none; 
+            display: none; 
         }
     </style>
 </head>
@@ -123,9 +135,7 @@
             <div id="highScore">ハイスコア: 0</div>
         </div>
         <canvas id="gameCanvas" width="600" height="300"></canvas>
-        <div class="controls">
-            <button id="startButton">ゲーム開始</button>
-        </div>
+        <div id="hitZMessage">HIT Z BUTTON</div>
         <p class="mt-2 text-sm text-gray-400">
             操作: <span class="key-info">[←][→]</span> 移動, <span class="key-info">[Z]</span> ジャンプ (または画面タップ)
         </p>
@@ -148,7 +158,7 @@
 
         <div id="allClearOverlay">
             <div class="overlay-message">今週をやっつけた！オールクリア！</div>
-            <img id="finalKatsuCurryImage" src="" alt="豪華なカツカレー" class="katsu-curry-image">
+            <img id="finalKatsuCurryImage" src="" alt="豪華なカツカレー" class="katsu-curry-image"> 
             <div id="allClearScoreMessage" class="mb-4">最終スコア: 0</div>
             <button id="playAgainButton" class="bg-blue-500 hover:bg-blue-700">もう一度挑戦</button>
         </div>
@@ -157,10 +167,10 @@
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const startButton = document.getElementById('startButton');
         const scoreDisplay = document.getElementById('score');
         const highScoreDisplay = document.getElementById('highScore');
         const stageDisplay = document.getElementById('stageDisplay');
+        const hitZMessageEl = document.getElementById('hitZMessage');
 
         const messageOverlay = document.getElementById('messageOverlay');
         const finalScoreMessage = document.getElementById('finalScoreMessage');
@@ -168,12 +178,12 @@
 
         const stageClearOverlay = document.getElementById('stageClearOverlay');
         const stageClearMessage = document.getElementById('stageClearMessage');
-        const katsuCurryImageEl = document.getElementById('katsuCurryImage');
+        const katsuCurryImageEl = document.getElementById('katsuCurryImage'); 
         const nextStageInfo = document.getElementById('nextStageInfo');
         const nextStageButton = document.getElementById('nextStageButton');
 
         const allClearOverlay = document.getElementById('allClearOverlay');
-        const finalKatsuCurryImageEl = document.getElementById('finalKatsuCurryImage');
+        const finalKatsuCurryImageEl = document.getElementById('finalKatsuCurryImage'); 
         const allClearScoreMessage = document.getElementById('allClearScoreMessage');
         const playAgainButton = document.getElementById('playAgainButton');
 
@@ -193,16 +203,20 @@
         let jumpForce = 13; 
         let animationFrameId;
         let gameRunning = false;
+        let demoRunning = false; 
         let obstacleTimer = 0; 
+        let canInteract = true;
+        let gameOverTimerId = null; 
+        let allClearTimerId = null; 
 
         const katsuCurryImageUrl = "https://raw.githubusercontent.com/keigox68000/RunBlueMan/refs/heads/main/katsucurry.png";
 
         const stages = [ 
-            { name: "月曜日", speed: 2.0, clearScore: 5, katsuSize: 1.0, nextText: "次は火曜日！少し速くなるぞ！", designColor: "#32CD32", playerSpeed: 3.5, obstacleMinInterval: 80, obstacleMaxInterval: 150 },
-            { name: "火曜日", speed: 3.0, clearScore: 7, katsuSize: 1.2, nextText: "次は水曜日！もっと速く！", designColor: "#FFD700", playerSpeed: 4.0, obstacleMinInterval: 70, obstacleMaxInterval: 130 },
-            { name: "水曜日", speed: 4.0, clearScore: 9, katsuSize: 1.4, nextText: "次は木曜日！かなり速い！", designColor: "#FF8C00", playerSpeed: 4.5, obstacleMinInterval: 60, obstacleMaxInterval: 110 },
-            { name: "木曜日", speed: 5.0, clearScore: 11, katsuSize: 1.6, nextText: "ラスト！金曜日！最速！", designColor: "#FF4500", playerSpeed: 5.0, obstacleMinInterval: 50, obstacleMaxInterval: 90 },
-            { name: "金曜日", speed: 6.0, clearScore: 13, katsuSize: 1.8, nextText: "今週もお疲れ様！", designColor: "#DC143C", playerSpeed: 5.5, obstacleMinInterval: 40, obstacleMaxInterval: 70 }
+            { name: "月曜日", speed: 2.0, clearScore: 4, katsuSize: 0.5, nextText: "次は火曜日！少し速くなるぞ！", designColor: "#32CD32", playerSpeed: 3.5, obstacleMinInterval: 80, obstacleMaxInterval: 150 },
+            { name: "火曜日", speed: 2.2, clearScore: 6, katsuSize: 0.8, nextText: "次は水曜日！もっと速く！", designColor: "#FFD700", playerSpeed: 4.0, obstacleMinInterval: 70, obstacleMaxInterval: 130 },
+            { name: "水曜日", speed: 2.8, clearScore: 8, katsuSize: 1.0, nextText: "次は木曜日！かなり速い！", designColor: "#FF8C00", playerSpeed: 4.5, obstacleMinInterval: 60, obstacleMaxInterval: 110 },
+            { name: "木曜日", speed: 3.6, clearScore: 10, katsuSize: 1.2, nextText: "ラスト！金曜日！最速！", designColor: "#FF4500", playerSpeed: 5.0, obstacleMinInterval: 50, obstacleMaxInterval: 90 },
+            { name: "金曜日", speed: 5.0, clearScore: 12, katsuSize: 1.4, nextText: "今週もお疲れ様！", designColor: "#DC143C", playerSpeed: 5.5, obstacleMinInterval: 40, obstacleMaxInterval: 70 }
         ];
         let currentStageIndex = 0;
         let gameSpeed; 
@@ -362,16 +376,19 @@
             stageDesignOffset = 0; 
         }
 
-        function spawnObstacle() { /* ... (変更なし) ... */ 
+        function spawnObstacle(isDemo = false) { /* ... (変更なし) ... */ 
             const minH = 25; 
             const maxH = 70;
             const obstacleHeight = Math.random() * (maxH - minH) + minH;
             const obstacleWidth = obstacleHeight * (0.8 + Math.random() * 0.4); 
             const obstacleX = canvas.width;
+            const color = isDemo ? `hsl(${Math.random() * 360}, 70%, 70%)` : obstacleColor; 
             
-            obstacles.push(new Obstacle(obstacleX, 0, obstacleWidth, obstacleHeight, obstacleColor, gameSpeed));
-            nextObstacleInterval = Math.floor(Math.random() * (maxObstacleInterval - minObstacleInterval + 1)) + minObstacleInterval;
-            obstacleTimer = 0;
+            obstacles.push(new Obstacle(obstacleX, 0, obstacleWidth, obstacleHeight, color, isDemo ? 3 : gameSpeed)); 
+            if (!isDemo) {
+                 nextObstacleInterval = Math.floor(Math.random() * (maxObstacleInterval - minObstacleInterval + 1)) + minObstacleInterval;
+                 obstacleTimer = 0;
+            }
         }
 
         function updateGame() { /* ... (変更なし) ... */ 
@@ -436,8 +453,51 @@
 
             animationFrameId = requestAnimationFrame(updateGame);
         }
+        
+        function runDemoScreen() { 
+            demoRunning = true;
+            hitZMessageEl.style.display = 'block';
+            // stageDisplay.textContent = "デモ画面"; // 「デモ画面」の文字を削除
+            stageDisplay.textContent = stages[currentStageIndex].name; // 現在のステージ名（通常は月曜日）を表示
+            obstacles = []; 
+            let demoObstacleTimer = 0;
+            const demoObstacleInterval = 50; 
+
+            function demoLoop() {
+                if (!demoRunning) {
+                    hitZMessageEl.style.display = 'none';
+                    return;
+                }
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = groundColor; 
+                ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
+
+                demoObstacleTimer++;
+                if (demoObstacleTimer >= demoObstacleInterval) {
+                    spawnObstacle(true); 
+                    demoObstacleTimer = 0;
+                }
+
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    const obs = obstacles[i];
+                    obs.update();
+                    obs.draw();
+                    if (obs.x + obs.width < 0) {
+                        obstacles.splice(i, 1);
+                    }
+                }
+                animationFrameId = requestAnimationFrame(demoLoop);
+            }
+            demoLoop();
+        }
+
 
         function initGame() { /* ... (変更なし) ... */ 
+            demoRunning = false; 
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            hitZMessageEl.style.display = 'none';
             currentStageIndex = 0;
             score = 0; 
             startGame();
@@ -446,7 +506,7 @@
         function startGame() { /* ... (変更なし) ... */ 
             setupStage(currentStageIndex);
             gameRunning = true;
-            startButton.style.display = 'none'; 
+            canInteract = true; 
             messageOverlay.style.display = 'none';
             stageClearOverlay.style.display = 'none';
             allClearOverlay.style.display = 'none';
@@ -464,8 +524,9 @@
             animationFrameId = requestAnimationFrame(updateGame);
         }
 
-        function handleStageClear() { /* ... (変更なし) ... */ 
+        function handleStageClear() { 
             gameRunning = false;
+            canInteract = false; 
             cancelAnimationFrame(animationFrameId);
             
             const currentStage = stages[currentStageIndex];
@@ -479,7 +540,12 @@
                 nextStageInfo.textContent = stages[currentStageIndex].nextText;
                 nextStageButton.textContent = `次のステージ (${stages[currentStageIndex + 1].name}) へ`;
                 nextStageButton.style.display = 'block';
+                nextStageButton.disabled = true; 
                 stageClearOverlay.style.display = 'flex';
+                setTimeout(() => {
+                    canInteract = true; 
+                    nextStageButton.disabled = false; 
+                }, 1000); // 遅延時間を1秒に変更
             } else {
                 allClearOverlay.style.display = 'flex';
                 finalKatsuCurryImageEl.src = katsuCurryImageUrl;
@@ -504,11 +570,24 @@
                     localStorage.setItem('cyberJumpWeeklyHighScore', highScore);
                 }
                 updateScoreDisplay();
+                
+                clearTimeout(allClearTimerId); 
+                allClearTimerId = setTimeout(() => { 
+                    if (!gameRunning && allClearOverlay.style.display === 'flex') {
+                        allClearOverlay.style.display = 'none';
+                        resetGameView();
+                    }
+                }, 5000);
+
+                 setTimeout(() => { 
+                    canInteract = true;
+                }, 1000); // オールクリア後のボタン操作可能までの時間も1秒に短縮
             }
         }
 
         function gameOver() { /* ... (変更なし) ... */ 
             gameRunning = false;
+            canInteract = false; 
             cancelAnimationFrame(animationFrameId);
             
             finalScoreMessage.textContent = `スコア: ${score}`;
@@ -519,7 +598,18 @@
                 localStorage.setItem('cyberJumpWeeklyHighScore', highScore);
             }
             updateScoreDisplay();
-            startButton.style.display = 'none'; 
+            
+            clearTimeout(gameOverTimerId); 
+            gameOverTimerId = setTimeout(() => {
+                if (!gameRunning && messageOverlay.style.display === 'flex') { 
+                    messageOverlay.style.display = 'none';
+                    resetGameView(); 
+                }
+            }, 5000);
+
+            setTimeout(() => { 
+                canInteract = true;
+            }, 1000); 
         }
 
         function updateScoreDisplay() { /* ... (変更なし) ... */ 
@@ -528,65 +618,73 @@
         }
         
         function resetGameView() { /* ... (変更なし) ... */ 
-            startButton.style.display = 'block';
-            startButton.disabled = false;
-            startButton.textContent = "ゲーム開始";
             messageOverlay.style.display = 'none';
             stageClearOverlay.style.display = 'none';
             allClearOverlay.style.display = 'none';
+            canInteract = true; 
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = groundColor;
-            ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
-
-            const initialStage = stages[0];
-            stageDisplay.textContent = initialStage.name;
-            gameSpeed = initialStage.speed; 
-            stageDesignOffset = 0; 
-            drawStageDesign(); 
-
-            const tempPlayer = new Player(50, canvas.height - groundHeight - playerHeight, playerWidth, playerHeight, playerColor); 
-            tempPlayer.onGround = true;
-            tempPlayer.draw();
-            updateScoreDisplay();
+            runDemoScreen();
+            updateScoreDisplay(); 
         }
 
         resetGameView();
 
-        startButton.addEventListener('click', initGame);
         restartButton.addEventListener('click', () => {
+            if (!canInteract) return;
+            clearTimeout(gameOverTimerId); 
             messageOverlay.style.display = 'none';
             initGame(); 
         });
         nextStageButton.addEventListener('click', () => {
+            if (!canInteract) return;
             currentStageIndex++;
             stageClearOverlay.style.display = 'none';
             startGame();
         });
         playAgainButton.addEventListener('click', () => {
+            if (!canInteract) return;
+            clearTimeout(allClearTimerId); 
             allClearOverlay.style.display = 'none';
             initGame(); 
         });
 
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
-            if (e.code === 'ArrowRight') keys.ArrowRight = true;
-            if (e.code === 'KeyZ' && !keys.KeyZ && gameRunning) { 
-                player.jump();
-                keys.KeyZ = true; 
+            if (!canInteract && (e.code === 'Space' || e.code === 'KeyZ')) { 
+                 e.preventDefault();
+                 return;
             }
 
-            if (e.code === 'Space' || e.code === 'KeyZ') { 
-                 e.preventDefault();
-                if (!gameRunning) {
+            if (e.code === 'KeyZ') { 
+                e.preventDefault();
+                if (demoRunning) { 
+                    initGame();
+                } else if (gameRunning && !keys.KeyZ) { 
+                    player.jump();
+                    keys.KeyZ = true; 
+                } else if (!gameRunning) { 
                     if (messageOverlay.style.display === 'flex') {
                         restartButton.click();
-                    } else if (stageClearOverlay.style.display === 'flex' && currentStageIndex < stages.length -1) {
+                    } else if (stageClearOverlay.style.display === 'flex' && currentStageIndex < stages.length -1 && !nextStageButton.disabled) { 
                         nextStageButton.click();
                     } else if (allClearOverlay.style.display === 'flex') {
                         playAgainButton.click();
-                    } else if (startButton.style.display !== 'none' && !startButton.disabled) {
-                        startButton.click();
+                    }
+                }
+            }
+
+            if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
+            if (e.code === 'ArrowRight') keys.ArrowRight = true;
+            
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (!gameRunning && canInteract) {
+                     if (messageOverlay.style.display === 'flex') {
+                        restartButton.click();
+                    } else if (stageClearOverlay.style.display === 'flex' && currentStageIndex < stages.length -1 && !nextStageButton.disabled) { 
+                        nextStageButton.click();
+                    } else if (allClearOverlay.style.display === 'flex') {
+                        playAgainButton.click();
                     }
                 }
             }
@@ -599,23 +697,37 @@
         });
 
 
-        canvas.addEventListener('touchstart', (e) => { /* ... (変更なし) ... */ 
+        canvas.addEventListener('click', () => { 
+            if (demoRunning && canInteract) {
+                initGame();
+            }
+        });
+        canvas.addEventListener('touchstart', (e) => { 
             e.preventDefault(); 
-            if (gameRunning) {
+            if (!canInteract) return; 
+
+            if (demoRunning) {
+                initGame();
+            } else if (gameRunning) {
                 player.jump(); 
             } else if (messageOverlay.style.display === 'flex') {
                 restartButton.click();
-            } else if (stageClearOverlay.style.display === 'flex' && currentStageIndex < stages.length -1) {
+            } else if (stageClearOverlay.style.display === 'flex' && currentStageIndex < stages.length -1 && !nextStageButton.disabled) {
                 nextStageButton.click();
             } else if (allClearOverlay.style.display === 'flex') {
                 playAgainButton.click();
-            } else if (startButton.style.display !== 'none' && !startButton.disabled) {
-                startButton.click();
             }
         });
-        window.addEventListener('resize', () => { /* ... (変更なし) ... */ 
-            if (!gameRunning) { 
+        window.addEventListener('resize', () => { 
+            if (!gameRunning && !demoRunning) { 
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = groundColor;
+                ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
+                hitZMessageEl.style.display = 'block'; 
+            } else if (demoRunning) {
+                // デモ中はdemoLoopで再描画
+            } else if (!gameRunning) { 
+                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = groundColor;
                 ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
                  const stageToDraw = stages[currentStageIndex] || stages[0];
@@ -623,9 +735,7 @@
                 stageDesignOffset = 0;
                 drawStageDesign();
                 
-                const tempPlayerForResize = new Player(50, canvas.height - groundHeight - playerHeight, playerWidth, playerHeight, playerColor);
-                tempPlayerForResize.onGround = true;
-                tempPlayerForResize.draw();
+                if(player) player.draw(); 
             }
         });
     </script>
