@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>走れ青い人！</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #1a1a1a;
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            color: #fff;
+        }
+        #gameCanvas {
+            background-color: #000;
+            border: 2px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+        }
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background-color: #2a2a2a;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        .controls, .info, .stage-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+        }
+        .stage-info {
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #ffdd57;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,123,255,0.5);
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        #score, #highScore {
+            font-size: 1.1em;
+            color: #00ffff;
+            text-shadow: 0 0 5px #00ffff;
+        }
+        #messageOverlay, #stageClearOverlay, #allClearOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            padding: 20px;
+            box-sizing: border-box;
+            border-radius: 12px;
+        }
+        .overlay-message {
+            font-size: 1.5em;
+            margin-bottom: 10px; 
+        }
+        .sub-message { 
+            font-size: 1em;
+            color: #ccc;
+            margin-bottom: 20px;
+        }
+        .katsu-curry-image {
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(255, 223, 186, 0.7);
+            background-color: #fff;
+        }
+        .next-stage-button {
+             margin-top: 20px;
+        }
+        .key-info {
+            font-size: 0.9em;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 class="text-3xl font-bold mb-2 text-cyan-400">走れ青い人！</h1>
+        <div id="stageDisplay" class="stage-info">月曜日</div>
+        <div class="info">
+            <div id="score">スコア: 0</div>
+            <div id="highScore">ハイスコア: 0</div>
+        </div>
+        <canvas id="gameCanvas" width="600" height="300"></canvas>
+        <div class="controls">
+            <button id="startButton">ゲーム開始</button>
+        </div>
+        <p class="mt-2 text-sm text-gray-400">
+            操作: <span class="key-info">[←][→]</span> 移動, <span class="key-info">[Z]</span> ジャンプ (または画面タップ)
+        </p>
+
+        <div id="messageOverlay">
+            <div class="overlay-message">ゲームオーバー!</div>
+            <div class="sub-message">いろいろ限界…</div>
+            <div id="finalScoreMessage" class="mb-4">スコア: 0</div>
+            <button id="restartButton" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+                リスタート
+            </button>
+        </div>
+
+        <div id="stageClearOverlay">
+            <div id="stageClearMessage" class="overlay-message">ステージクリア！</div>
+            <img id="katsuCurryImage" src="" alt="カツカレー" class="katsu-curry-image">
+            <div id="nextStageInfo"></div>
+            <button id="nextStageButton" class="next-stage-button bg-green-500 hover:bg-green-700">次のステージへ</button>
+        </div>
+
+        <div id="allClearOverlay">
+            <div class="overlay-message">今週をやっつけた！オールクリア！</div>
+            <img id="finalKatsuCurryImage" src="" alt="豪華なカツカレー" class="katsu-curry-image">
+            <div id="allClearScoreMessage" class="mb-4">最終スコア: 0</div>
+            <button id="playAgainButton" class="bg-blue-500 hover:bg-blue-700">もう一度挑戦</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const scoreDisplay = document.getElementById('score');
+        const highScoreDisplay = document.getElementById('highScore');
+        const stageDisplay = document.getElementById('stageDisplay');
+
+        const messageOverlay = document.getElementById('messageOverlay');
+        const finalScoreMessage = document.getElementById('finalScoreMessage');
+        const restartButton = document.getElementById('restartButton');
+
+        const stageClearOverlay = document.getElementById('stageClearOverlay');
+        const stageClearMessage = document.getElementById('stageClearMessage');
+        const katsuCurryImageEl = document.getElementById('katsuCurryImage');
+        const nextStageInfo = document.getElementById('nextStageInfo');
+        const nextStageButton = document.getElementById('nextStageButton');
+
+        const allClearOverlay = document.getElementById('allClearOverlay');
+        const finalKatsuCurryImageEl = document.getElementById('finalKatsuCurryImage');
+        const allClearScoreMessage = document.getElementById('allClearScoreMessage');
+        const playAgainButton = document.getElementById('playAgainButton');
+
+        const playerWidth = 45;
+        const playerHeight = 60;
+        const playerColor = '#00ffff';
+        let playerMoveSpeed; 
+        const obstacleColor = '#ff00ff';
+        const groundHeight = 50; 
+        const groundColor = '#555'; 
+
+        let player;
+        let obstacles = []; 
+        let score = 0;
+        let highScore = localStorage.getItem('cyberJumpWeeklyHighScore') || 0;
+        let gravity = 0.5; 
+        let jumpForce = 13; 
+        let animationFrameId;
+        let gameRunning = false;
+        let obstacleTimer = 0; 
+
+        const katsuCurryImageUrl = "https://raw.githubusercontent.com/keigox68000/RunBlueMan/refs/heads/main/katsucurry.png";
+
+        const stages = [ 
+            { name: "月曜日", speed: 2.0, clearScore: 5, katsuSize: 1.0, nextText: "次は火曜日！少し速くなるぞ！", designColor: "#32CD32", playerSpeed: 3.5, obstacleMinInterval: 80, obstacleMaxInterval: 150 },
+            { name: "火曜日", speed: 3.0, clearScore: 7, katsuSize: 1.2, nextText: "次は水曜日！もっと速く！", designColor: "#FFD700", playerSpeed: 4.0, obstacleMinInterval: 70, obstacleMaxInterval: 130 },
+            { name: "水曜日", speed: 4.0, clearScore: 9, katsuSize: 1.4, nextText: "次は木曜日！かなり速い！", designColor: "#FF8C00", playerSpeed: 4.5, obstacleMinInterval: 60, obstacleMaxInterval: 110 },
+            { name: "木曜日", speed: 5.0, clearScore: 11, katsuSize: 1.6, nextText: "ラスト！金曜日！最速！", designColor: "#FF4500", playerSpeed: 5.0, obstacleMinInterval: 50, obstacleMaxInterval: 90 },
+            { name: "金曜日", speed: 6.0, clearScore: 13, katsuSize: 1.8, nextText: "今週もお疲れ様！", designColor: "#DC143C", playerSpeed: 5.5, obstacleMinInterval: 40, obstacleMaxInterval: 70 }
+        ];
+        let currentStageIndex = 0;
+        let gameSpeed; 
+        
+        let minObstacleInterval;
+        let maxObstacleInterval;
+        let nextObstacleInterval;
+        let stageScore = 0;
+        let stageDesignOffset = 0; 
+
+        const animationFrames = [ /* ... (変更なし) ... */ 
+            (x, y, w, h, color) => { ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + w * 0.5, y + h * 0.15, h * 0.12, 0, Math.PI * 2); ctx.moveTo(x + w * 0.5, y + h * 0.27); ctx.lineTo(x + w * 0.45, y + h * 0.6); ctx.moveTo(x + w * 0.45, y + h * 0.6); ctx.lineTo(x + w * 0.6, y + h * 0.75); ctx.lineTo(x + w * 0.75, y + h * 0.65); ctx.moveTo(x + w * 0.45, y + h * 0.6); ctx.lineTo(x + w * 0.2, y + h * 0.8); ctx.lineTo(x + w * 0.1, y + h); ctx.moveTo(x + w * 0.5, y + h * 0.35); ctx.lineTo(x + w * 0.7, y + h * 0.5); ctx.moveTo(x + w * 0.5, y + h * 0.35); ctx.lineTo(x + w * 0.25, y + h * 0.45); ctx.stroke(); },
+            (x, y, w, h, color) => { ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + w * 0.5, y + h * 0.15, h * 0.12, 0, Math.PI * 2); ctx.moveTo(x + w * 0.5, y + h * 0.27); ctx.lineTo(x + w * 0.5, y + h * 0.6); ctx.moveTo(x + w * 0.5, y + h * 0.6); ctx.lineTo(x + w * 0.65, y + h * 0.8); ctx.lineTo(x + w * 0.7, y + h); ctx.moveTo(x + w * 0.5, y + h * 0.6); ctx.lineTo(x + w * 0.35, y + h * 0.85); ctx.lineTo(x + w * 0.25, y + h * 0.95); ctx.moveTo(x + w * 0.5, y + h * 0.35); ctx.lineTo(x + w * 0.6, y + h * 0.3); ctx.moveTo(x + w * 0.5, y + h * 0.35); ctx.lineTo(x + w * 0.4, y + h * 0.5); ctx.stroke(); },
+            (x, y, w, h, color) => { ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + w * 0.5, y + h * 0.15, h * 0.12, 0, Math.PI * 2); ctx.moveTo(x + w * 0.5, y + h * 0.27); ctx.lineTo(x + w * 0.55, y + h * 0.6); ctx.moveTo(x + w * 0.55, y + h * 0.6); ctx.lineTo(x + w * 0.4, y + h * 0.75); ctx.lineTo(x + w * 0.25, y + h * 0.65); ctx.moveTo(x + w * 0.55, y + h * 0.6); ctx.lineTo(x + w * 0.8, y + h * 0.8); ctx.lineTo(x + w * 0.9, y + h); ctx.moveTo(x + w * 0.5, y + h * 0.35); ctx.lineTo(x + w * 0.3, y + h * 0.5); ctx.moveTo(x + w * 0.5, y + h * 0.35); ctx.lineTo(x + w * 0.75, y + h * 0.45); ctx.stroke(); },
+            (x, y, w, h, color) => { ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + w * 0.5, y + h * 0.15, h * 0.12, 0, Math.PI * 2); ctx.moveTo(x + w * 0.5, y + h * 0.27); ctx.lineTo(x + w * 0.5, y + h * 0.6); ctx.moveTo(x + w * 0.5, y + h * 0.6); ctx.lineTo(x + w * 0.35, y + h * 0.8); ctx.lineTo(x + w * 0.3, y + h); ctx.moveTo(x + w * 0.5, y + h * 0.6); ctx.lineTo(x + w * 0.65, y + h * 0.85); ctx.lineTo(x + w * 0.75, y + h * 0.95); ctx.moveTo(x + w * 0.5, y + h * 0.35); ctx.lineTo(x + w * 0.4, y + h * 0.3); ctx.moveTo(x + w * 0.5, y + h * 0.35); ctx.lineTo(x + w * 0.6, y + h * 0.5); ctx.stroke(); },
+        ];
+
+        const keys = { ArrowLeft: false, ArrowRight: false, KeyZ: false };
+
+        class Player { /* ... (変更なし) ... */ 
+            constructor(x, y, width, height, color) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+                this.velocityX = 0; 
+                this.velocityY = 0;
+                this.isJumping = false;
+                this.onGround = false; 
+                this.animationFrames = animationFrames;
+                this.currentFrame = 0;
+                this.animationTimer = 0;
+                this.animationSpeed = 7;
+                this.jumpFrame = 0;
+            }
+
+            draw() { 
+                let frameToDraw;
+                if (this.isJumping) {
+                    frameToDraw = this.animationFrames[this.jumpFrame];
+                } else {
+                    frameToDraw = this.animationFrames[this.currentFrame];
+                    this.animationTimer++;
+                    if (this.animationTimer >= this.animationSpeed) {
+                        this.currentFrame = (this.currentFrame + 1) % this.animationFrames.length;
+                        this.animationTimer = 0;
+                    }
+                }
+                frameToDraw(this.x, this.y, this.width, this.height, this.color);
+            }
+
+            jump() {
+                if (this.onGround) { 
+                    this.velocityY = -jumpForce;
+                    this.isJumping = true;
+                    this.onGround = false;
+                }
+            }
+
+            update() { 
+                if (keys.ArrowLeft) {
+                    this.velocityX = -playerMoveSpeed;
+                } else if (keys.ArrowRight) {
+                    this.velocityX = playerMoveSpeed;
+                } else {
+                    this.velocityX = 0;
+                }
+                this.x += this.velocityX;
+
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+
+                this.velocityY += gravity;
+                this.y += this.velocityY;
+
+                const fixedGroundY = canvas.height - groundHeight;
+                if (this.y + this.height >= fixedGroundY) {
+                    this.y = fixedGroundY - this.height;
+                    this.velocityY = 0;
+                    this.isJumping = false;
+                    this.onGround = true;
+                } else {
+                    this.onGround = false;
+                }
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.velocityY = 0;
+                }
+            }
+        }
+        
+        class Obstacle { /* ... (変更なし) ... */ 
+            constructor(x, y, width, height, color, speed) {
+                this.x = x;
+                this.y = canvas.height - groundHeight - height; 
+                this.width = width;
+                this.height = height;
+                this.color = color;
+                this.speed = speed;
+                this.passed = false;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2; 
+                ctx.moveTo(this.x + this.width / 2, this.y);
+                ctx.lineTo(this.x, this.y + this.height);
+                ctx.lineTo(this.x + this.width, this.y + this.height);
+                ctx.closePath(); 
+                ctx.stroke(); 
+            }
+
+            update() {
+                this.x -= this.speed;
+            }
+        }
+
+        function drawStageDesign() { /* ... (変更なし) ... */ 
+            const stage = stages[currentStageIndex];
+            const designColor = stage.designColor;
+            const waveHeight = 15; 
+            const waveLength = 100; 
+            const designGroundY = canvas.height - groundHeight + 10; 
+
+            ctx.beginPath();
+            ctx.strokeStyle = designColor;
+            ctx.lineWidth = 2; 
+
+            for (let xPos = 0; xPos < canvas.width + waveLength; xPos += 5) { 
+                const yOffset1 = Math.sin((xPos + stageDesignOffset) / (waveLength / (Math.PI * 2))) * waveHeight * 0.6;
+                const yOffset2 = Math.sin((xPos + stageDesignOffset * 0.7) / (waveLength * 0.7 / (Math.PI * 2))) * waveHeight * 0.4;
+                const yPos = designGroundY - 20 + yOffset1 + yOffset2;  
+
+                if (xPos === 0) {
+                    ctx.moveTo(xPos, yPos);
+                } else {
+                    ctx.lineTo(xPos, yPos);
+                }
+            }
+            ctx.stroke();
+            stageDesignOffset += gameSpeed * 0.3; 
+            if (stageDesignOffset > waveLength * 10) { 
+                 stageDesignOffset = 0;
+            }
+        }
+
+        function setupStage(stageIndex) { /* ... (変更なし) ... */ 
+            const stage = stages[stageIndex]; 
+            stageDisplay.textContent = stage.name;
+            gameSpeed = stage.speed;
+            playerMoveSpeed = stage.playerSpeed; 
+            minObstacleInterval = stage.obstacleMinInterval;
+            maxObstacleInterval = stage.obstacleMaxInterval;
+            stageScore = 0;
+            stageDesignOffset = 0; 
+        }
+
+        function spawnObstacle() { /* ... (変更なし) ... */ 
+            const minH = 25; 
+            const maxH = 70;
+            const obstacleHeight = Math.random() * (maxH - minH) + minH;
+            const obstacleWidth = obstacleHeight * (0.8 + Math.random() * 0.4); 
+            const obstacleX = canvas.width;
+            
+            obstacles.push(new Obstacle(obstacleX, 0, obstacleWidth, obstacleHeight, obstacleColor, gameSpeed));
+            nextObstacleInterval = Math.floor(Math.random() * (maxObstacleInterval - minObstacleInterval + 1)) + minObstacleInterval;
+            obstacleTimer = 0;
+        }
+
+        function updateGame() { /* ... (変更なし) ... */ 
+            if (!gameRunning) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = groundColor;
+            ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
+
+            drawStageDesign(); 
+
+            player.update(); 
+            player.draw();
+
+            obstacleTimer++;
+            if (obstacleTimer >= nextObstacleInterval) {
+                spawnObstacle();
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const obs = obstacles[i];
+                obs.speed = gameSpeed; 
+                obs.update();
+                obs.draw();
+
+                const playerHitboxX = player.x + player.width * 0.2;
+                const playerHitboxY = player.y + player.height * 0.1;
+                const playerHitboxWidth = player.width * 0.6;
+                const playerHitboxHeight = player.height * 0.8;
+                
+                const obsHitboxX = obs.x;
+                const obsHitboxY = obs.y; 
+                const obsHitboxWidth = obs.width;
+                const obsHitboxHeight = obs.height;
+
+                if (
+                    playerHitboxX < obsHitboxX + obsHitboxWidth &&
+                    playerHitboxX + playerHitboxWidth > obsHitboxX &&
+                    playerHitboxY < obsHitboxY + obsHitboxHeight &&
+                    playerHitboxY + playerHitboxHeight > obsHitboxY
+                ) {
+                    gameOver();
+                    return;
+                }
+
+                if (!obs.passed && obs.x + obs.width < player.x) {
+                    score++;
+                    stageScore++; 
+                    obs.passed = true; 
+                    updateScoreDisplay();
+                    if (stageScore >= stages[currentStageIndex].clearScore) {
+                        handleStageClear();
+                        return;
+                    }
+                }
+
+                if (obs.x + obs.width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            animationFrameId = requestAnimationFrame(updateGame);
+        }
+
+        function initGame() { /* ... (変更なし) ... */ 
+            currentStageIndex = 0;
+            score = 0; 
+            startGame();
+        }
+        
+        function startGame() { /* ... (変更なし) ... */ 
+            setupStage(currentStageIndex);
+            gameRunning = true;
+            startButton.style.display = 'none'; 
+            messageOverlay.style.display = 'none';
+            stageClearOverlay.style.display = 'none';
+            allClearOverlay.style.display = 'none';
+
+            player = new Player(50, canvas.height - groundHeight - playerHeight, playerWidth, playerHeight, playerColor);
+            player.onGround = true; 
+            obstacles = []; 
+            obstacleTimer = 0; 
+            nextObstacleInterval = Math.floor(Math.random() * (maxObstacleInterval - minObstacleInterval + 1)) + minObstacleInterval + 100; 
+
+            updateScoreDisplay();
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            animationFrameId = requestAnimationFrame(updateGame);
+        }
+
+        function handleStageClear() { /* ... (変更なし) ... */ 
+            gameRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            
+            const currentStage = stages[currentStageIndex];
+            stageClearMessage.textContent = `${currentStage.name} クリア！`;
+            
+            katsuCurryImageEl.src = katsuCurryImageUrl;
+            katsuCurryImageEl.style.width = `${150 * currentStage.katsuSize}px`; 
+            katsuCurryImageEl.style.height = "auto"; 
+
+            if (currentStageIndex < stages.length - 1) {
+                nextStageInfo.textContent = stages[currentStageIndex].nextText;
+                nextStageButton.textContent = `次のステージ (${stages[currentStageIndex + 1].name}) へ`;
+                nextStageButton.style.display = 'block';
+                stageClearOverlay.style.display = 'flex';
+            } else {
+                allClearOverlay.style.display = 'flex';
+                finalKatsuCurryImageEl.src = katsuCurryImageUrl;
+                finalKatsuCurryImageEl.style.width = `${150 * (currentStage.katsuSize + 0.5)}px`; 
+                finalKatsuCurryImageEl.style.height = "auto";
+                
+                const existingTrophy = finalKatsuCurryImageEl.previousSibling;
+                if (existingTrophy && existingTrophy.textContent === "🏆") {
+                    existingTrophy.remove();
+                }
+
+                const trophyEl = document.createElement('div');
+                trophyEl.textContent = "🏆";
+                trophyEl.style.fontSize = `${35 * (currentStage.katsuSize + 0.5)}px`;
+                trophyEl.style.textAlign = "center";
+                finalKatsuCurryImageEl.parentNode.insertBefore(trophyEl, finalKatsuCurryImageEl);
+
+
+                allClearScoreMessage.textContent = `最終スコア: ${score}`;
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('cyberJumpWeeklyHighScore', highScore);
+                }
+                updateScoreDisplay();
+            }
+        }
+
+        function gameOver() { /* ... (変更なし) ... */ 
+            gameRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            
+            finalScoreMessage.textContent = `スコア: ${score}`;
+            messageOverlay.style.display = 'flex';
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('cyberJumpWeeklyHighScore', highScore);
+            }
+            updateScoreDisplay();
+            startButton.style.display = 'none'; 
+        }
+
+        function updateScoreDisplay() { /* ... (変更なし) ... */ 
+            scoreDisplay.textContent = `スコア: ${score}`;
+            highScoreDisplay.textContent = `ハイスコア: ${highScore}`;
+        }
+        
+        function resetGameView() { /* ... (変更なし) ... */ 
+            startButton.style.display = 'block';
+            startButton.disabled = false;
+            startButton.textContent = "ゲーム開始";
+            messageOverlay.style.display = 'none';
+            stageClearOverlay.style.display = 'none';
+            allClearOverlay.style.display = 'none';
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = groundColor;
+            ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
+
+            const initialStage = stages[0];
+            stageDisplay.textContent = initialStage.name;
+            gameSpeed = initialStage.speed; 
+            stageDesignOffset = 0; 
+            drawStageDesign(); 
+
+            const tempPlayer = new Player(50, canvas.height - groundHeight - playerHeight, playerWidth, playerHeight, playerColor); 
+            tempPlayer.onGround = true;
+            tempPlayer.draw();
+            updateScoreDisplay();
+        }
+
+        resetGameView();
+
+        startButton.addEventListener('click', initGame);
+        restartButton.addEventListener('click', () => {
+            messageOverlay.style.display = 'none';
+            initGame(); 
+        });
+        nextStageButton.addEventListener('click', () => {
+            currentStageIndex++;
+            stageClearOverlay.style.display = 'none';
+            startGame();
+        });
+        playAgainButton.addEventListener('click', () => {
+            allClearOverlay.style.display = 'none';
+            initGame(); 
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
+            if (e.code === 'ArrowRight') keys.ArrowRight = true;
+            if (e.code === 'KeyZ' && !keys.KeyZ && gameRunning) { 
+                player.jump();
+                keys.KeyZ = true; 
+            }
+
+            if (e.code === 'Space' || e.code === 'KeyZ') { 
+                 e.preventDefault();
+                if (!gameRunning) {
+                    if (messageOverlay.style.display === 'flex') {
+                        restartButton.click();
+                    } else if (stageClearOverlay.style.display === 'flex' && currentStageIndex < stages.length -1) {
+                        nextStageButton.click();
+                    } else if (allClearOverlay.style.display === 'flex') {
+                        playAgainButton.click();
+                    } else if (startButton.style.display !== 'none' && !startButton.disabled) {
+                        startButton.click();
+                    }
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft') keys.ArrowLeft = false;
+            if (e.code === 'ArrowRight') keys.ArrowRight = false;
+            if (e.code === 'KeyZ') keys.KeyZ = false; 
+        });
+
+
+        canvas.addEventListener('touchstart', (e) => { /* ... (変更なし) ... */ 
+            e.preventDefault(); 
+            if (gameRunning) {
+                player.jump(); 
+            } else if (messageOverlay.style.display === 'flex') {
+                restartButton.click();
+            } else if (stageClearOverlay.style.display === 'flex' && currentStageIndex < stages.length -1) {
+                nextStageButton.click();
+            } else if (allClearOverlay.style.display === 'flex') {
+                playAgainButton.click();
+            } else if (startButton.style.display !== 'none' && !startButton.disabled) {
+                startButton.click();
+            }
+        });
+        window.addEventListener('resize', () => { /* ... (変更なし) ... */ 
+            if (!gameRunning) { 
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = groundColor;
+                ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
+                 const stageToDraw = stages[currentStageIndex] || stages[0];
+                gameSpeed = stageToDraw.speed; 
+                stageDesignOffset = 0;
+                drawStageDesign();
+                
+                const tempPlayerForResize = new Player(50, canvas.height - groundHeight - playerHeight, playerWidth, playerHeight, playerColor);
+                tempPlayerForResize.onGround = true;
+                tempPlayerForResize.draw();
+            }
+        });
+    </script>
+</body>
+</html>
