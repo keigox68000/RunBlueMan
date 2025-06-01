@@ -1,6 +1,6 @@
 # 走れ青い人！ 🏃💨
 
-![走れ青い人！ スクリーンショット](rbm.gif)
+<img src="rbm.gif" alt="screenshot" width="300">
 
 ## 🚀 公開ページ
 
